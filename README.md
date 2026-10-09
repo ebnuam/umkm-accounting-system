@@ -119,8 +119,3 @@ Database lokal dijalankan melalui binding D1/Miniflare. Versi prototype memakai 
 
 Repository ini merupakan versi pengembangan. Prioritas berikutnya adalah menyiapkan public demo yang aman, memperbaiki pemisahan data menjadi tabel transaksi yang lebih terstruktur, dan menambah pengujian laporan keuangan.
 
-## Author
-
-**Ebnu Abdillah Muhyi**  
-Accounting student — STIE SBI Yogyakarta  
-[LinkedIn](https://www.linkedin.com/in/ebnuabdillah/)
