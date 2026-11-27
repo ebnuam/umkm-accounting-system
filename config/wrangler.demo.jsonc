@@ -1,0 +1,23 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "umkm-accounting-demo",
+  "main": "../worker/index.ts",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "observability": {
+    "enabled": false
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "umkm-accounting-demo-db",
+      "database_id": "786d846e-cda3-4426-901d-3114b41c936e",
+      "migrations_dir": "../drizzle"
+    }
+  ],
+  "vars": {
+    "APP_DEMO_MODE": "true",
+    "DISABLE_PUBLIC_SIGNUP": "false"
+  }
+}

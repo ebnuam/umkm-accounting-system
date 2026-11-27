@@ -12,7 +12,13 @@
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
+    "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate",
+    "db:migrate:local": "node scripts/migrate-local.mjs",
+    "db:backup:local": "node scripts/backup-local.mjs",
+    "auth:bootstrap-owner": "node scripts/bootstrap-owner.mjs",
+    "dev:selfhosted": "node scripts/selfhosted-cli.mjs dev",
+    "build:selfhosted": "node scripts/selfhosted-cli.mjs build",
+    "start:selfhosted": "node scripts/selfhosted-cli.mjs start"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

@@ -1,38 +1,38 @@
+import { fileURLToPath } from "node:url";
 import vinext from "vinext";
-import { defineConfig } from "vite";
-import hostingConfig from "./config/hosting.json";
-
-const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
-  "00000000-0000-4000-8000-000000000000";
-
-const { d1, r2 } = hostingConfig;
+import { defineConfig, type UserConfig } from "vite";
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
+const isSelfHostedSqlite =
+  (process.env.DB_ADAPTER ?? "").trim().toLowerCase() === "sqlite";
 
-const localBindingConfig = {
-  main: "./worker/index.ts",
-  compatibility_flags: ["nodejs_compat"],
-  d1_databases: d1
-    ? [
-        {
-          binding: d1,
-          database_name: "site-creator-d1",
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
+export default defineConfig(async (): Promise<UserConfig> => {
+  if (isSelfHostedSqlite) {
+    return {
+      server: {
+        host: "0.0.0.0",
+        allowedHosts: ["terminal.local"],
+      },
+      resolve: {
+        alias: {
+          "cloudflare:workers": fileURLToPath(
+            new URL("./db/cloudflare-workers-stub.ts", import.meta.url),
+          ),
         },
-      ]
-    : [],
-  r2_buckets: r2
-    ? [
-        {
-          binding: r2,
-          bucket_name: "site-creator-r2",
+      },
+      ssr: {
+        external: ["node:sqlite"],
+      },
+      build: {
+        rolldownOptions: {
+          external: ["node:sqlite"],
         },
-      ]
-    : [],
-};
+      },
+      plugins: [vinext()],
+    };
+  }
 
-export default defineConfig(async () => {
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
   // settings; application environment belongs in ignored `.env*` files.
   process.env.WRANGLER_WRITE_LOGS ??= "false";
@@ -41,6 +41,8 @@ export default defineConfig(async () => {
 
   // Wrangler snapshots its log path while the Cloudflare plugin is imported.
   const { cloudflare } = await import("@cloudflare/vite-plugin");
+
+  const stubPath = fileURLToPath(new URL("./db/local-sqlite-stub.ts", import.meta.url));
 
   return {
     server: {
@@ -51,11 +53,26 @@ export default defineConfig(async () => {
         : {}),
     },
     plugins: [
+      {
+        name: "exclude-local-sqlite-for-workers",
+        enforce: "pre",
+        resolveId(source) {
+          if (
+            source === "node:sqlite" ||
+            source === "./local-sqlite-repository.ts" ||
+            source.endsWith("/local-sqlite-repository.ts") ||
+            source.endsWith("\\local-sqlite-repository.ts")
+          ) {
+            return stubPath;
+          }
+          return null;
+        },
+      },
       vinext(),
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         inspectorPort: false,
-        config: localBindingConfig,
+        configPath: "./config/wrangler.demo.jsonc",
       }),
     ],
   };
