@@ -1,3 +1,4 @@
+import { isCogsAccount, isCurrentAssetAccount } from "./coa.ts";
 import { parsePeriod } from "./period.ts";
 import type { Account, JournalEntry } from "./types.ts";
 
@@ -243,7 +244,10 @@ export function buildFinancialStatements(params: {
     .filter((a) => a.group === "revenue")
     .reduce((sum, a) => sum - (periodActivityBalances[a.code] ?? 0), 0);
 
-  const cogs = ((periodActivityBalances["5101"] ?? 0) + (periodActivityBalances["5108"] ?? 0)) || 0;
+  const cogs =
+    params.accounts
+      .filter((a) => isCogsAccount(a))
+      .reduce((sum, a) => sum + (periodActivityBalances[a.code] ?? 0), 0) || 0;
   const totalExpenses =
     params.accounts
       .filter((a) => a.group === "expense")
@@ -286,11 +290,11 @@ export function buildFinancialStatements(params: {
 
   // Balance Sheet (Cumulative Real Accounts through period.end)
   const currentAssets = params.accounts
-    .filter((a) => a.group === "asset" && a.code.startsWith("11"))
+    .filter((a) => isCurrentAssetAccount(a))
     .reduce((sum, a) => sum + (cumulativeBalances[a.code] ?? 0), 0);
 
   const fixedAssetsGross = params.accounts
-    .filter((a) => a.group === "asset" && !a.code.startsWith("11"))
+    .filter((a) => a.group === "asset" && !isCurrentAssetAccount(a))
     .reduce((sum, a) => sum + (cumulativeBalances[a.code] ?? 0), 0);
   const contraAssets = params.accounts
     .filter((a) => a.group === "contra_asset")

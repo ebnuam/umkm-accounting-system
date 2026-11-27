@@ -1,4 +1,5 @@
 import {
+  CONTROL_SUBLEDGER_ACCOUNT_CODES,
   DEFAULT_REVENUE_ACCOUNT_BY_CATEGORY,
   deriveAccountDefaults,
   getAccountMap,
@@ -1266,6 +1267,11 @@ export class AccountingEngine {
       if (!acc.active) throw new ValidationError(`Akun "${code} ${acc.name}" sedang nonaktif.`);
       if (code === "3999") {
         throw new ValidationError("Akun 3999 Ikhtisar Laba Rugi hanya digunakan oleh proses Tutup Periode.");
+      }
+      if (CONTROL_SUBLEDGER_ACCOUNT_CODES.has(code)) {
+        throw new ValidationError(
+          `Akun kontrol subledger "${code} ${acc.name}" tidak dapat diposting langsung lewat Jurnal Umum agar saldo faktur/persediaan tetap sinkron. Gunakan modul Penjualan, Pembelian, Kas & Bank, Produksi, atau Stock Opname.`,
+        );
       }
       return {
         accountCode: code,

@@ -185,6 +185,22 @@ for (const adapter of [
       assert.equal(fsOct.openingCapital, 8_100_000); // 5,000,000 + 3,100,000
       assert.equal(fsOct.isBalanced, true);
 
+      // Subledger control accounts (1103, 1104, 1105, 1106, 2101) cannot be posted directly via General Journal
+      for (const ctrlCode of ["1103", "1104", "1105", "1106", "2101"]) {
+        await assert.rejects(
+          () =>
+            engine.postGeneralJournal(tService, "u1", {
+              date: "2026-10-02",
+              description: "Test control guard",
+              lines: [
+                { accountCode: ctrlCode, debit: 50_000, credit: 0 },
+                { accountCode: "1101", debit: 0, credit: 50_000 },
+              ],
+            }),
+          ValidationError,
+        );
+      }
+
       // Toggle custom account inactive after closing
       const toggled = await engine.toggleAccountActive(tService, "u1", "5120");
       assert.equal(toggled.active, false);

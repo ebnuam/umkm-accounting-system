@@ -1045,7 +1045,7 @@
             <small id="itemStockHint">Harga default &amp; moving avg muncul otomatis.</small>
           </div>`
         : "";
-      const cashAccountField = moduleKey === "cashbank"
+      const cashAccountField = ["cashbank", "purchases"].includes(moduleKey)
         ? `<div class="form-field" id="cashAccountWrap">
             <label for="cashAccount">Akun Kas / Bank</label>
             <select id="cashAccount" name="cashAccountCode" ${closed ? "disabled" : ""}>
@@ -1370,7 +1370,8 @@
     if (ledgerSection === "journal") {
       const closed = isActivePeriodClosed();
       if (formOpen.journal) {
-        const activeAccounts = workspace.accounts.filter((a) => a.active && a.code !== "3999");
+        const controlCodes = new Set(["3999", "1103", "1104", "1105", "1106", "2101"]);
+        const activeAccounts = workspace.accounts.filter((a) => a.active && !controlCodes.has(a.code));
         const accOpts = activeAccounts
           .map((a) => `<option value="${a.code}">${a.code} · ${escapeHtml(a.name)}</option>`)
           .join("");
@@ -1576,10 +1577,21 @@
   function renderStatements() {
     const fin = statements;
     const p = activePeriodInfo();
+    const isCogsAcc = (a) => {
+      if (a.group !== "expense") return false;
+      const cat = String(a.category || "").toLowerCase();
+      return a.code === "5101" || a.code === "5108" || cat.includes("hpp") || cat.includes("beban pokok");
+    };
+    const isCurrentAssetAcc = (a) => {
+      if (a.group !== "asset") return false;
+      const cat = String(a.category || "").toLowerCase();
+      return a.code.startsWith("10") || a.code.startsWith("11") || cat.includes("lancar");
+    };
     const revAccounts = workspace.accounts.filter((a) => a.group === "revenue");
-    const opExpAccounts = workspace.accounts.filter((a) => a.group === "expense" && a.code !== "5101");
-    const currAssets = workspace.accounts.filter((a) => a.group === "asset" && a.code.startsWith("11"));
-    const fixedAssets = workspace.accounts.filter((a) => a.group === "asset" && !a.code.startsWith("11"));
+    const cogsAccounts = workspace.accounts.filter((a) => isCogsAcc(a));
+    const opExpAccounts = workspace.accounts.filter((a) => a.group === "expense" && !isCogsAcc(a));
+    const currAssets = workspace.accounts.filter((a) => isCurrentAssetAcc(a));
+    const fixedAssets = workspace.accounts.filter((a) => a.group === "asset" && !isCurrentAssetAcc(a));
     const contraAssets = workspace.accounts.filter((a) => a.group === "contra_asset");
     const liabAccounts = workspace.accounts.filter((a) => a.group === "liability");
 
@@ -1609,7 +1621,9 @@
             ${reportRow("Pendapatan", null, "report-section")}
             ${revAccounts.filter((a) => Math.abs(fin.periodActivityBalances[a.code] || 0) > 0).map((a) => reportRow(a.name, -(fin.periodActivityBalances[a.code] || 0), "report-detail")).join("")}
             ${reportRow("Total Pendapatan", fin.revenue, "report-subtotal", true)}
-            ${reportRow("Harga Pokok Penjualan (HPP)", fin.cogs, "report-detail")}
+            ${reportRow("Harga Pokok / Beban Pokok", null, "report-section")}
+            ${cogsAccounts.filter((a) => Math.abs(fin.periodActivityBalances[a.code] || 0) > 0).map((a) => reportRow(a.name, fin.periodActivityBalances[a.code] || 0, "report-detail")).join("")}
+            ${reportRow("Total Harga Pokok (HPP)", fin.cogs, "report-subtotal", true)}
             ${reportRow("Laba Kotor", fin.grossProfit, "report-subtotal", true)}
             ${reportRow("Beban Operasional", null, "report-section")}
             ${opExpAccounts.filter((a) => Math.abs(fin.periodActivityBalances[a.code] || 0) > 0).map((a) => reportRow(a.name, fin.periodActivityBalances[a.code] || 0, "report-detail")).join("")}
@@ -2068,6 +2082,10 @@
       const t = typeSelect.value;
       if (expenseWrap) expenseWrap.style.display = t === "cash_expense" ? "" : "none";
       if (assetWrap) assetWrap.style.display = t.startsWith("equipment_") ? "" : "none";
+      const cashWrap = document.getElementById("cashAccountWrap");
+      if (cashWrap && moduleKey === "purchases") {
+        cashWrap.style.display = t.endsWith("_cash") ? "" : "none";
+      }
       const isEquip = t.startsWith("equipment_");
       const item = itemSelect ? workspace.items.find((i) => i.id === itemSelect.value) : null;
       const isNonStockItem = Boolean(item && !item.trackInventory);
@@ -2110,10 +2128,10 @@
           ? (item.cogsAccountCode || "5108")
           : (item?.inventoryAccountCode || "1104");
         previewLines.push({ side: "Dr", code: dr, amount });
-        previewLines.push({ side: "Cr", code: t === "inventory_credit" ? "2101" : "1101", amount });
+        previewLines.push({ side: "Cr", code: t === "inventory_credit" ? "2101" : cashCode, amount });
       } else if (t === "equipment_cash" || t === "equipment_credit") {
         previewLines.push({ side: "Dr", code: assetSelect?.value || "1201", amount });
-        previewLines.push({ side: "Cr", code: t === "equipment_credit" ? "2101" : "1101", amount });
+        previewLines.push({ side: "Cr", code: t === "equipment_credit" ? "2101" : cashCode, amount });
       } else if (t === "collect_receivable") {
         previewLines.push({ side: "Dr", code: cashCode, amount }, { side: "Cr", code: "1103", amount });
       } else if (t === "pay_payable") {

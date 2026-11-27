@@ -140,6 +140,26 @@ export function getAccountMap(accounts: Account[]): Record<string, Account> {
   return Object.fromEntries(accounts.map((account) => [account.code, account]));
 }
 
+export const CONTROL_SUBLEDGER_ACCOUNT_CODES = new Set<string>([
+  "1103",
+  "1104",
+  "1105",
+  "1106",
+  "2101",
+]);
+
+export function isCogsAccount(account: Account): boolean {
+  if (account.group !== "expense") return false;
+  const cat = account.category.toLowerCase();
+  return account.code === "5101" || account.code === "5108" || cat.includes("hpp") || cat.includes("beban pokok");
+}
+
+export function isCurrentAssetAccount(account: Account): boolean {
+  if (account.group !== "asset") return false;
+  const cat = account.category.toLowerCase();
+  return account.code.startsWith("10") || account.code.startsWith("11") || cat.includes("lancar");
+}
+
 export function isRealAccount(account: Account): boolean {
   return account.nature === "real";
 }
