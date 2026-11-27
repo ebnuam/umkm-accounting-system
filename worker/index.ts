@@ -1,10 +1,14 @@
-/** Cloudflare Worker entry point for the vinext-starter template. */
+/** Cloudflare Worker entry point for NeracaKita / UMKM Accounting System. */
+import { drizzle } from "drizzle-orm/d1";
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { cleanupExpiredDemoSandboxes } from "../db/demo-cleanup.ts";
+import * as schema from "../db/schema.ts";
 
 interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
+  APP_DEMO_MODE?: string;
   IMAGES: {
     input(stream: ReadableStream): {
       transform(options: Record<string, unknown>): {
@@ -18,12 +22,6 @@ interface ExecutionContext {
   waitUntil(promise: Promise<unknown>): void;
   passThroughOnException(): void;
 }
-
-// Image security config. SVG sources with .svg extension auto-skip the
-// optimization endpoint on the client side (served directly, no proxy).
-// To route SVGs through the optimizer (with security headers), set
-// dangerouslyAllowSVG: true in next.config.js and uncomment below:
-// const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
 
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -41,6 +39,12 @@ const worker = {
     }
 
     return handler.fetch(request, env, ctx);
+  },
+
+  async scheduled(_controller: unknown, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (env.APP_DEMO_MODE !== "true" || !env.DB) return;
+    const db = drizzle(env.DB, { schema });
+    ctx.waitUntil(cleanupExpiredDemoSandboxes(db));
   },
 };
 

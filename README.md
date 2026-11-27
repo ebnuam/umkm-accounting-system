@@ -1,121 +1,92 @@
-# Aneka Snack — UMKM Accounting System
+# UMKM Accounting System (NeracaKita)
 
-Web-based accounting system prototype untuk studi kasus UMKM makanan keluarga di Bantul, Yogyakarta. Aplikasi mengolah transaksi operasional menjadi jurnal, buku besar, neraca saldo, jurnal penyesuaian, dan laporan keuangan dalam satu periode akuntansi.
+Aplikasi pembukuan dan akuntansi **double-entry** multi-sektor (**Dagang**, **Jasa**, dan **Produksi Ringan**) untuk UMKM dengan *accounting core* TypeScript yang terisolasi dari framework web dan mendukung dua runtime database: **Cloudflare Workers + D1** serta **Node.js + Local SQLite**.
 
-> **Status:** In Development  
-> Data yang digunakan merupakan data simulasi untuk pembelajaran dan portofolio, bukan pembukuan resmi usaha.
+> **Status: In Development**  
+> Proyek ini masih dalam tahap pengembangan untuk pembelajaran dan portofolio. Seluruh data usaha contoh (**Aneka Snack**) bersifat simulasi, dan aplikasi ini belum diaudit sebagai sistem akuntansi produksi atau pelaporan pajak resmi.
 
-## Live Preview
+---
 
-Demo statis tersedia melalui GitHub Pages. Demo memakai data contoh dan menyimpan perubahan hanya selama halaman masih dibuka. Penyimpanan Cloudflare D1 dan ekspor server tersedia pada versi backend.
+## Live Demo
 
-## Tujuan Proyek
+- **URL Demo**: https://umkm-accounting-demo.ebnunih.workers.dev
+- Menggunakan dataset simulasi **Aneka Snack** dengan **sandbox terisolasi per pengunjung** serta uji pergantian peran **Owner** vs **Staff**.
+- Lihat [docs/demo-guide.md](docs/demo-guide.md) untuk panduan skenario uji coba.
 
-Proyek ini dibuat untuk mempraktikkan siklus akuntansi UMKM sekaligus memahami hubungan antara antarmuka aplikasi, business logic, API, dan database dalam penyusunan laporan keuangan.
+---
 
-## Fitur Utama
+## Kemampuan Utama
 
-- Dashboard ringkasan penjualan, laba bersih, kas, piutang, utang, dan aset
-- Pencatatan penjualan, pembelian, kas dan bank
-- Master barang dan pencatatan persediaan
-- Pembentukan jurnal otomatis dari transaksi rutin
-- Buku besar dengan saldo berjalan
-- Neraca saldo sebelum dan setelah penyesuaian
-- Penyesuaian penyusutan, beban akrual, dan persediaan akhir
-- Laporan laba rugi, perubahan modal, dan posisi keuangan
-- Pengaturan nama usaha dan periode laporan
-- Ekspor laporan ke PDF dan XLSX
-- Penyimpanan state aplikasi pada Cloudflare D1
+- **Double-Entry & Kontrol Subledger**: Setiap transaksi membentuk jurnal Debit = Kredit tervalidasi; akun kontrol (`1103`, `2101`, `1104`–`1106`) dilindungi dari posting manual Jurnal Umum agar sinkron dengan subledger.
+- **Daftar Akun (43 Akun Bawaan + Custom COA)**: Dirancang untuk pencatatan UMKM dengan mempertimbangkan prinsip SAK EMKM, memisahkan tegas **Akun Riil** (saldo berlanjut antarperiode) dan **Akun Nominal** (ditutup saat tutup buku), serta pembuatan akun kustom khusus **Owner**.
+- **Persediaan Perpetual Moving Average**: Memisahkan **Bahan Baku (`1104`)**, **Barang Dalam Proses / WIP (`1106`)**, dan **Barang Jadi (`1105`)** dengan pencegah stok negatif, pembersihan residu pembulatan saat stok `0`, dan **Stock Opname (`+/-`)**.
+- **Produksi Ringan & Jasa**: Input pemakaian beberapa bahan baku/WIP per batch produksi dengan kapitalisasi **BTKL** dan **BOP**, serta layanan jasa non-stok (`4102` / `5108`).
+- **Piutang & Utang Terhubung ke Faktur**: Pembayaran parsial maupun lunas, validasi pihak, serta pencegahan *overpayment*.
+- **Void / Reversal & Audit Trail**: Tidak menyediakan hapus jurnal (`DELETE`); pembatalan pada periode terbuka menerbitkan jurnal pembalik beserta pengembalian stok/faktur secara atomik dan tercatat di `audit_logs`.
+- **Laporan & Ekspor**: Buku Besar per akun, Neraca Saldo (Sebelum & Setelah Penyesuaian), Laba Rugi, Perubahan Modal, Posisi Keuangan (Neraca), Ikhtisar Kas & Tagihan, serta ekspor server-side **PDF** dan **XLSX**.
+- **Autentikasi Multi-Tenant & RBAC**: Password hashing PBKDF2-SHA256, sesi database dengan rotasi token, proteksi same-origin/CSRF, rate limit login, keanggotaan multi-bisnis, dan peran **Owner** vs **Staff**.
 
-## Alur Akuntansi
+---
 
-```text
-Transaksi
-   ↓
-Jurnal Umum
-   ↓
-Buku Besar
-   ↓
-Neraca Saldo
-   ↓
-Jurnal Penyesuaian
-   ↓
-Neraca Saldo Disesuaikan
-   ↓
-Laporan Keuangan
-```
-
-## Arsitektur Aplikasi
+## Arsitektur Sistem
 
 ```text
-Frontend (React/Vinext)
-        ↓ HTTP Request
-API Routes / Business Logic
-        ↓ Query
-Cloudflare D1 (SQLite)
-        ↓ Data
-Jurnal, Buku Besar, dan Laporan Keuangan
+app/, public/app.js          UI (Vinext / React) & API Routes (/api/accounting/*, /api/auth/*, /api/export/*)
+        ↓ memanggil
+core/                        Accounting Core & Auth Service (Pure TypeScript, zero framework/ORM coupling)
+        ↓ bergantung pada interface
+core/repository.ts           AccountingRepository & AuthRepository
+   ├── db/d1-repository.ts           Cloudflare Workers + Cloudflare D1 (Hosted)
+   └── db/local-sqlite-repository.ts Node.js node:sqlite WAL mode (Self-Hosted)
 ```
 
-### Frontend
+---
 
-Antarmuka digunakan untuk memasukkan transaksi, memilih periode, menjalankan proses akhir bulan, dan menampilkan laporan. Perhitungan akuntansi pada prototype dijalankan oleh business logic aplikasi berdasarkan data transaksi yang tersimpan.
+## Menjalankan Secara Lokal (Self-Hosted SQLite)
 
-### Backend dan API
-
-Backend berjalan melalui Cloudflare Worker dan route server:
-
-| Method | Endpoint | Fungsi |
-| --- | --- | --- |
-| `GET` | `/api/state` | Mengambil data akuntansi milik pengguna |
-| `PUT` | `/api/state` | Menyimpan atau memperbarui data akuntansi |
-| `POST` | `/api/export/xlsx` | Membentuk laporan dalam format XLSX |
-| `POST` | `/api/export/pdf` | Membentuk laporan dalam format PDF |
-
-### Database
-
-Cloudflare D1 digunakan sebagai database SQL berbasis SQLite. Pada versi prototype, state akuntansi disimpan per pengguna pada tabel `accounting_states`.
-
-| Kolom | Fungsi |
-| --- | --- |
-| `user_id` | Identitas sesi browser dan primary key |
-| `state_json` | Data profil usaha, periode, transaksi, barang, dan penyesuaian |
-| `updated_at` | Waktu pembaruan terakhir |
-
-Skema dan migrasi database tersedia di folder `db/` dan `drizzle/`.
-
-## Tech Stack
-
-- TypeScript
-- React dan Vinext
-- Cloudflare Workers
-- Cloudflare D1 (SQLite)
-- Drizzle ORM
-- HTML dan CSS
-
-## Struktur Utama
-
-```text
-app/                 halaman dan API routes
-db/                  koneksi serta skema database
-drizzle/             migrasi database
-public/app.js         business logic siklus akuntansi
-worker/              entry point Cloudflare Worker
-tests/                pengujian alur dan perhitungan
-```
-
-## Menjalankan Secara Lokal
-
-Persyaratan: Node.js 22 atau lebih baru.
+Prasyarat: **Node.js `>= 22.13.0`** (direkomendasikan Node.js 24+).
 
 ```bash
 npm install
-npm run dev
+cp .env.example .env
+# Isi DB_ADAPTER=sqlite dan SESSION_SECRET acak minimal 32 karakter pada .env
+
+npm run db:migrate:local
+npm run auth:bootstrap-owner -- --email owner@umkm.local --name "Pemilik Usaha" --business "UMKM Makmur"
+
+npm run build:selfhosted
+npm run start:selfhosted
 ```
 
-Database lokal dijalankan melalui binding D1/Miniflare. Versi prototype memakai cookie sesi anonim agar data pada satu browser tidak bercampur dengan browser lain. Sistem login dan otorisasi pengguna belum menjadi bagian dari scope proyek.
+Panduan lengkap instalasi, konfigurasi environment, dan backup/restore SQLite tersedia pada [docs/self-hosting.md](docs/self-hosting.md).
 
-## Catatan Pengembangan
+---
 
-Repository ini merupakan versi pengembangan. Prioritas berikutnya adalah menyiapkan public demo yang aman, memperbaiki pemisahan data menjadi tabel transaksi yang lebih terstruktur, dan menambah pengujian laporan keuangan.
+## Pengujian
 
+```bash
+node --test tests/*.test.mjs
+```
+
+Suite pengujian mencakup unit test accounting core, edge cases pembulatan & concurrency, multi-sektor (Dagang/Jasa/Manufaktur), contract test kesetaraan D1 vs Local SQLite, isolasi multi-tenant, RBAC Owner/Staff, ekspor PDF/XLSX, serta sandbox demo.
+
+---
+
+## Keterbatasan Saat Ini
+
+- Belum tersedia **Laporan Arus Kas** tersendiri.
+- Modul produksi bersifat input bahan per batch (belum memiliki *Bill of Materials* / master resep tersimpan permanen per produk).
+- Pembatalan transaksi persediaan dilakukan melalui *Void / Reversal* satu dokumen penuh (belum berupa retur parsial per baris).
+- Belum tersedia *Fixed Asset Register* otomatis maupun rekonsiliasi mutasi rekening koran.
+- Belum tersedia verifikasi email dan pemulihan kata sandi mandiri.
+
+---
+
+## Dokumentasi
+
+- [docs/accounting-policy.md](docs/accounting-policy.md) — Kebijakan & perlakuan akuntansi
+- [docs/architecture.md](docs/architecture.md) — Pemisahan layer & repository abstraction
+- [docs/authentication.md](docs/authentication.md) — Autentikasi, sesi, keanggotaan bisnis & RBAC
+- [docs/self-hosting.md](docs/self-hosting.md) — Instalasi self-hosted dengan SQLite lokal
+- [docs/deployment-cloudflare.md](docs/deployment-cloudflare.md) — Deployment Cloudflare Workers & D1
+- [docs/demo-guide.md](docs/demo-guide.md) — Panduan penggunaan live demo publik

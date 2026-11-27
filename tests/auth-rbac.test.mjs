@@ -10,6 +10,7 @@ import { drizzle } from "drizzle-orm/sqlite-proxy";
 import * as schema from "../db/schema.ts";
 import { DrizzleSqliteAccountingRepository } from "../db/d1-repository.ts";
 import { DrizzleSqliteAuthRepository } from "../db/auth-repository.ts";
+import { cleanupExpiredDemoSandboxes } from "../db/demo-cleanup.ts";
 import { createLocalSqliteRepository } from "../db/local-sqlite-repository.ts";
 import { hashPassword, verifyPassword } from "../core/index.ts";
 import {
@@ -847,6 +848,91 @@ test("Controlled Aneka Snack demo sandbox isolates visitors, enforces Owner/Staf
     const resetJson = await resReset.json();
     assert.equal(resetJson.workspace.profile.businessName, "Aneka Snack");
     assert.equal(resetJson.statements.isBalanced, true);
+  } finally {
+    await cleanup();
+  }
+});
+
+test("cleanupExpiredDemoSandboxes removes expired demo-* tenants while preserving active demo and real tenants", async () => {
+  const { accountingRepo, authRepo, cleanup } = await createD1StyleRepos();
+  try {
+    const origin = "https://demo.umkm.test";
+    const tOld = Date.now() - 48 * 3_600_000;
+    const tNow = Date.now();
+
+    // 1. Real user business (must never be touched)
+    const realRes = await handleRegister(
+      new Request(`${origin}/api/auth/register`, {
+        method: "POST",
+        headers: { origin, "content-type": "application/json" },
+        body: JSON.stringify({
+          email: "real@umkm.id",
+          fullName: "Pemilik Asli",
+          password: "RealPassword!99",
+          businessName: "Toko Nyata",
+          seedDemo: false,
+        }),
+      }),
+      authRepo,
+      accountingRepo,
+      { disablePublicSignup: false },
+    );
+    assert.equal(realRes.status, 201);
+    const realTenantId = (await realRes.json()).activeTenantId;
+
+    // 2. Old demo sandbox created 48h ago (session now expired/revoked)
+    const oldDemoRes = await handleDemoStart(
+      new Request(`${origin}/api/auth/demo-start`, {
+        method: "POST",
+        headers: { origin, "content-type": "application/json" },
+        body: JSON.stringify({ role: "owner" }),
+      }),
+      authRepo,
+      accountingRepo,
+      { demoMode: true, nowMs: tOld },
+    );
+    assert.equal(oldDemoRes.status, 201);
+    const oldDemoTenantId = (await oldDemoRes.json()).activeTenantId;
+    const oldDemoCookie = extractSessionCookie(oldDemoRes);
+    await handleLogoutAuth(
+      new Request(`${origin}/api/auth/logout`, {
+        method: "POST",
+        headers: { origin, cookie: oldDemoCookie },
+      }),
+      authRepo,
+      accountingRepo,
+    );
+
+    // 3. Active demo sandbox created right now
+    const freshDemoRes = await handleDemoStart(
+      new Request(`${origin}/api/auth/demo-start`, {
+        method: "POST",
+        headers: { origin, "content-type": "application/json" },
+        body: JSON.stringify({ role: "owner" }),
+      }),
+      authRepo,
+      accountingRepo,
+      { demoMode: true, nowMs: tNow },
+    );
+    assert.equal(freshDemoRes.status, 201);
+    const freshDemoTenantId = (await freshDemoRes.json()).activeTenantId;
+
+    // Force old demo tenant created_at to 48h ago in DB
+    const db = accountingRepo.getDrizzleClient();
+    await db.update(schema.tenants).set({ createdAt: new Date(tOld).toISOString() }).where(
+      (await import("drizzle-orm")).eq(schema.tenants.id, oldDemoTenantId),
+    );
+
+    const summary = await cleanupExpiredDemoSandboxes(db, { maxAgeHours: 24, nowMs: tNow });
+    assert.deepEqual(summary.deletedTenants, [oldDemoTenantId]);
+    assert.equal(summary.deletedUsers, 2);
+
+    // Real tenant & fresh demo remain intact
+    const realWs = await accountingRepo.getWorkspace(realTenantId);
+    assert.equal(realWs.profile.businessName, "Toko Nyata");
+    const freshWs = await accountingRepo.getWorkspace(freshDemoTenantId);
+    assert.equal(freshWs.profile.businessName, "Aneka Snack");
+    assert.equal(await authRepo.countUsers(), 3); // 1 real + 2 fresh demo
   } finally {
     await cleanup();
   }
