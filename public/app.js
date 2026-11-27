@@ -259,6 +259,7 @@
   }
 
   function syncShell() {
+    const appShell = document.getElementById("appShell");
     const switchWrap = document.getElementById("businessSwitchWrap");
     const switcher = document.getElementById("businessSwitcher");
     const roleBadge = document.getElementById("roleBadge");
@@ -268,31 +269,26 @@
     const resetBtn = document.getElementById("resetButton");
 
     if (!authSessionState.authenticated || !workspace) {
+      appShell?.classList.add("is-unauth");
       if (switchWrap) switchWrap.style.display = "none";
       if (demoRoleBtn) demoRoleBtn.style.display = "none";
-      if (demoNotice) {
-        if (authSessionState.demoMode) {
-          demoNotice.style.display = "flex";
-          demoNotice.innerHTML = "<span><strong>MODE DEMO PUBLIK — DATA SIMULASI</strong> · Seluruh angka adalah simulasi usaha Aneka Snack dan tidak memakai data produksi.</span>";
-        } else {
-          demoNotice.style.display = "none";
-        }
-      }
+      if (demoNotice) demoNotice.style.display = "none";
       if (logoutBtn) logoutBtn.style.display = "none";
       if (resetBtn) resetBtn.style.display = "none";
       document.getElementById("periodLabel").textContent = "Perlu Masuk";
-      document.getElementById("brandName").textContent = authSessionState.demoMode ? "Aneka Snack Demo" : "NeracaKita";
-      document.getElementById("businessEyebrow").textContent = authSessionState.demoMode ? "LIVE DEMO" : "AKSES TERAUTENTIKASI";
+      document.getElementById("brandName").textContent = authSessionState.demoMode ? "Aneka Snack" : "NeracaKita";
+      document.getElementById("businessEyebrow").textContent = "Pembukuan";
       renderOpenTabsBar();
       return;
     }
 
+    appShell?.classList.remove("is-unauth");
     const isDemoSandbox = String(activeTenantId || "").startsWith("demo-");
     if (switchWrap) switchWrap.style.display = "flex";
     if (logoutBtn) logoutBtn.style.display = "";
     if (resetBtn) {
       resetBtn.style.display = currentRole === "owner" ? "" : "none";
-      resetBtn.textContent = isDemoSandbox ? "Reset Demo" : "Reset Contoh";
+      resetBtn.textContent = isDemoSandbox ? "Reset Demo" : "Reset";
     }
     if (demoRoleBtn) {
       if (authSessionState.demoMode && isDemoSandbox) {
@@ -305,7 +301,7 @@
     if (demoNotice) {
       if (authSessionState.demoMode || isDemoSandbox) {
         demoNotice.style.display = "flex";
-        demoNotice.innerHTML = `<span><strong>DATA SIMULASI</strong> · Sandbox <code>${escapeHtml(activeTenantId.slice(0, 14))}</code> (${currentRole === "owner" ? "Owner: akses penuh" : "Staff: tutup periode & pengaturan terkunci"})</span>`;
+        demoNotice.innerHTML = `<span><strong>Mode Simulasi</strong> · Sandbox <code>${escapeHtml(activeTenantId.slice(0, 12))}</code> · Peran aktif: ${currentRole === "owner" ? "Owner (Akses Penuh)" : "Staff (Operasional)"}</span>`;
       } else {
         demoNotice.style.display = "none";
       }
@@ -317,14 +313,20 @@
     }
     if (roleBadge) {
       roleBadge.textContent = currentRole === "owner" ? "Owner" : "Staff";
-      roleBadge.className = `type-pill ${currentRole === "owner" ? "posted" : "adjustment"}`;
+      roleBadge.className = `dot-badge ${currentRole === "owner" ? "good" : ""}`;
     }
 
     const p = activePeriodInfo();
-    const sectorLabel = BUSINESS_SECTOR_LABELS[workspace.profile.businessSector || "general"] || "SEMUA USAHA";
+    const sectorMap = {
+      general: "Semua Usaha",
+      trading: "Usaha Dagang",
+      service: "Usaha Jasa",
+      manufacturing: "Manufaktur"
+    };
+    const sectorLabel = sectorMap[workspace.profile.businessSector || "general"] || "Pembukuan";
     document.getElementById("periodLabel").textContent = isActivePeriodClosed() ? `${p.label} (Tutup)` : p.label;
     document.getElementById("brandName").textContent = workspace.profile.businessName;
-    document.getElementById("businessEyebrow").textContent = `${sectorLabel}`;
+    document.getElementById("businessEyebrow").textContent = sectorLabel;
     renderOpenTabsBar();
   }
 
@@ -430,17 +432,39 @@
     }
 
     const demoBoxHtml = authSessionState.demoMode
-      ? `<div class="demo-card-box">
-          <h4>Akses Cepat Live Demo — Aneka Snack (Sandbox Terisolasi)</h4>
-          <p>Uji pembukuan Dagang, Jasa &amp; Manufaktur langsung tanpa registrasi:</p>
-          <div class="demo-actions-row">
-            <button type="button" class="button primary" id="demoStartOwnerBtn">Masuk sebagai Owner</button>
-            <button type="button" class="button secondary" id="demoStartStaffBtn">Masuk sebagai Staff</button>
+      ? `<div class="auth-demo-box">
+          <strong>Live Demo — Aneka Snack</strong>
+          <small>Setiap sesi membuka sandbox terisolasi dengan data simulasi dagang, jasa &amp; manufaktur.</small>
+          <div class="auth-demo-actions">
+            <button type="button" class="button primary small" id="demoStartOwnerBtn">Masuk sebagai Owner</button>
+            <button type="button" class="button secondary small" id="demoStartStaffBtn">Masuk sebagai Staff</button>
           </div>
         </div>`
-      : "";
+      : `<div class="auth-demo-box"><strong>Keamanan &amp; Audit</strong><small>Jurnal double-entry tervalidasi di server, tidak menghapus catatan terposting.</small></div>`;
 
-    app.innerHTML = `<div class="auth-wrap"><section class="panel"><div class="panel-head"><div><h3>Masuk ke NeracaKita</h3><p>Sistem Akuntansi Double-Entry Multi-Bisnis</p></div></div><div class="panel-body">${demoBoxHtml}<div class="auth-tabs">${tabs.join("")}</div>${formHtml}</div></section></div>`;
+    app.innerHTML = `<div class="auth-split">
+      <aside class="auth-aside">
+        <div class="auth-brand"><div class="brand-mark">NK</div><strong>NeracaKita</strong></div>
+        <div class="auth-copy">
+          <h2>Pembukuan rapi untuk usaha dagang, jasa, dan produksi.</h2>
+          <p>Catat transaksi harian, kelola stok moving average, pantau piutang dan utang, hingga tutup buku akhir bulan dalam satu ruang kerja.</p>
+          <ul class="auth-points">
+            <li>COA 43 akun standar SAK EMKM &amp; akun kustom</li>
+            <li>Pemisahan Bahan Baku, WIP, dan Barang Jadi</li>
+            <li>Laporan Laba Rugi, Perubahan Modal &amp; Neraca</li>
+          </ul>
+        </div>
+        ${demoBoxHtml}
+      </aside>
+      <section class="auth-main">
+        <div class="auth-card">
+          <h1>${authTab === "register" ? "Buat Akun Bisnis" : authTab === "bootstrap" ? "Setup Owner Pertama" : "Masuk ke Akun Anda"}</h1>
+          <p class="auth-sub">${authSessionState.needsBootstrap ? "Database belum memiliki Owner. Gunakan setup token server." : "Kelola pembukuan bisnis secara terisolasi dan aman."}</p>
+          <div class="auth-tabs">${tabs.join("")}</div>
+          ${formHtml}
+        </div>
+      </section>
+    </div>`;
 
     document.getElementById("demoStartOwnerBtn")?.addEventListener("click", async () => {
       try {
@@ -764,33 +788,6 @@
       .sort((a, b) => (a.dueDate || a.date).localeCompare(b.dueDate || b.date));
   }
 
-  function renderSvgColumnChart(revenue, cogs, opex, netIncome) {
-    const bars = [
-      { label: "Pendapatan", val: Math.max(0, revenue), color: "#0f766e" },
-      { label: "HPP", val: Math.max(0, cogs), color: "#d97706" },
-      { label: "Beban Ops", val: Math.max(0, opex), color: "#64748b" },
-      { label: "Laba Bersih", val: Math.max(0, netIncome), color: netIncome >= 0 ? "#15803d" : "#b91c1c" }
-    ];
-    const maxVal = Math.max(...bars.map((b) => b.val), 1);
-    const chartH = 110;
-    const baseY = 124;
-    return `<svg class="svg-chart" viewBox="0 0 340 155" role="img" aria-label="Grafik Laba Rugi Periode">
-      <line x1="20" y1="14" x2="326" y2="14" stroke="#e2e8f0" stroke-dasharray="3 3" />
-      <line x1="20" y1="69" x2="326" y2="69" stroke="#e2e8f0" stroke-dasharray="3 3" />
-      <line x1="20" y1="${baseY}" x2="326" y2="${baseY}" stroke="#cbd5e1" stroke-width="1.2" />
-      ${bars.map((b, i) => {
-        const h = Math.max(3, Math.round((b.val / maxVal) * chartH));
-        const x = 36 + i * 74;
-        const y = baseY - h;
-        return `<g>
-          <rect x="${x}" y="${y}" width="38" height="${h}" rx="2" fill="${b.color}"><title>${b.label}: ${money(b.val)}</title></rect>
-          <text x="${x + 19}" y="${y - 4}" text-anchor="middle" font-size="9.5" font-weight="700" fill="#334155">${compactMoney(b.val).replace("Rp", "")}</text>
-          <text x="${x + 19}" y="142" text-anchor="middle" font-size="10" fill="#64748b">${b.label}</text>
-        </g>`;
-      }).join("")}
-    </svg>`;
-  }
-
   function renderOverview() {
     const fin = statements;
     const p = activePeriodInfo();
@@ -804,6 +801,7 @@
     const cashBankTotal = cashVal + bankVal;
     const openReceivables = openInvoicesFor("receivable");
     const openPayables = openInvoicesFor("payable");
+    const totalAr = fin.cumulativeBalances["1103"] || 0;
 
     const setupChecks = [
       { label: "Info & Sektor", ok: Boolean(workspace.profile?.businessName && workspace.profile?.businessSector) },
@@ -812,72 +810,90 @@
       { label: "Barang & Jasa", ok: workspace.items.length > 0 }
     ];
     const doneCount = setupChecks.filter((s) => s.ok).length;
+    const sectorLabel = BUSINESS_SECTOR_LABELS[workspace.profile?.businessSector || "general"] || "SEMUA USAHA";
     const grossMargin = fin.revenue > 0 ? `${Math.round((fin.grossProfit / fin.revenue) * 100)}%` : "0%";
+    const flowTotal = Math.max(fin.revenue + fin.cogs + fin.operatingExpenses, 1);
+    const revPct = Math.round((Math.max(0, fin.revenue) / flowTotal) * 100);
+    const cogsPct = Math.round((Math.max(0, fin.cogs) / flowTotal) * 100);
+    const opexPct = Math.max(0, 100 - revPct - cogsPct);
 
     return `<div class="page-stack">
-      <div class="erp-toolbar">
-        <div class="erp-toolbar-left">
-          <button type="button" class="button primary" id="dashNewSaleBtn">+ Faktur Penjualan</button>
-          <button type="button" class="button secondary" id="dashNewPurchaseBtn">+ Faktur Pembelian</button>
-          <button type="button" class="button secondary" id="dashNewJournalBtn">+ Jurnal Umum</button>
-          <button type="button" class="button secondary" data-go="cashbank">Kas &amp; Bank</button>
+      <div class="section-heading">
+        <div>
+          <h2>Ringkasan Bisnis</h2>
+          <p>${escapeHtml(workspace.profile.businessName)} · ${sectorLabel} · ${p.label}</p>
         </div>
         <div class="erp-toolbar-right">
-          <button type="button" class="button secondary" data-go="statements">Daftar Laporan</button>
-          <button type="button" class="button secondary" data-go="monthend">Proses Akhir Bulan</button>
+          <button type="button" class="button secondary" id="dashNewJournalBtn">+ Jurnal Umum</button>
+          <button type="button" class="button secondary" id="dashNewPurchaseBtn">+ Faktur Pembelian</button>
+          <button type="button" class="button primary" id="dashNewSaleBtn">+ Faktur Penjualan</button>
         </div>
       </div>
 
       <div class="setup-strip">
         <div class="setup-strip-steps">
-          <strong>Persiapan Data Usaha (${doneCount}/4):</strong>
-          ${setupChecks.map((c, idx) => `<span class="setup-check-item ${c.ok ? "done" : ""}">${c.ok ? "✓" : `${idx + 1}.`} ${c.label}</span>`).join("")}
+          <strong>Persiapan Usaha (${doneCount}/4):</strong>
+          ${setupChecks.map((c) => `<span class="setup-check-item ${c.ok ? "done" : ""}"><span class="setup-dot"></span>${c.label}</span>`).join("")}
         </div>
-        <button type="button" class="button small secondary" data-go="setup">Buka Persiapan Usaha</button>
+        <button type="button" class="button small secondary" data-go="setup">${doneCount === 4 ? "Lihat Setup" : "Lanjutkan Setup"}</button>
       </div>
 
       <div class="kpi-strip">
-        <div class="kpi-cell accent"><span>Penjualan (${p.label})</span><strong>${compactMoney(fin.revenue)}</strong></div>
-        <div class="kpi-cell good"><span>Laba Bersih</span><strong>${compactMoney(fin.netIncome)}</strong></div>
-        <div class="kpi-cell"><span>Kas &amp; Bank</span><strong>${compactMoney(cashBankTotal)}</strong></div>
-        <div class="kpi-cell"><span>Persediaan (1104–1106)</span><strong>${compactMoney(invTotal)}</strong></div>
-        <div class="kpi-cell"><span>Piutang (${openReceivables.length} faktur)</span><strong>${compactMoney(fin.cumulativeBalances["1103"] || 0)}</strong></div>
-        <div class="kpi-cell"><span>Total Liabilitas (${openPayables.length} utang)</span><strong>${compactMoney(fin.totalLiabilities)}</strong></div>
+        <div class="kpi-cell">
+          <span>Penjualan (${p.label})</span>
+          <strong>${compactMoney(fin.revenue)}</strong>
+          <small>Laba kotor ${compactMoney(fin.grossProfit)} (${grossMargin})</small>
+        </div>
+        <div class="kpi-cell">
+          <span>Laba Bersih Periode</span>
+          <strong>${compactMoney(fin.netIncome)}</strong>
+          <small>Total biaya ${compactMoney(fin.cogs + fin.operatingExpenses)}</small>
+        </div>
+        <div class="kpi-cell">
+          <span>Kas &amp; Bank</span>
+          <strong>${compactMoney(cashBankTotal)}</strong>
+          <small>Kas ${compactMoney(cashVal)} · Bank ${compactMoney(bankVal)}</small>
+        </div>
+        <div class="kpi-cell">
+          <span>Persediaan &amp; Tagihan</span>
+          <strong>${compactMoney(invTotal)}</strong>
+          <small>Piutang ${compactMoney(totalAr)} · Liabilitas ${compactMoney(fin.totalLiabilities)}</small>
+        </div>
       </div>
 
       <div class="dash-grid">
         <section class="widget">
-          <div class="widget-head"><h3>Laba / Rugi (${p.label})</h3><span class="type-pill posted">Margin Kotor ${grossMargin}</span></div>
+          <div class="widget-head"><h3>Ringkasan Laba Rugi (${p.label})</h3><button class="button small ghost" data-go="statements">Lihat Laporan</button></div>
           <div class="widget-body">
-            ${renderSvgColumnChart(fin.revenue, fin.cogs, fin.operatingExpenses, fin.netIncome)}
-            <div class="mini-list" style="margin-top:8px">
-              <div class="mini-row"><span>Laba Kotor</span><strong>${money(fin.grossProfit)}</strong></div>
-              <div class="mini-row"><span>Laba Bersih Periode</span><strong>${money(fin.netIncome)}</strong></div>
+            <div class="stacked-bar" aria-label="Proporsi Pendapatan dan Biaya">
+              <div class="stacked-seg rev" style="width:${revPct}%"></div>
+              <div class="stacked-seg cogs" style="width:${cogsPct}%"></div>
+              <div class="stacked-seg opex" style="width:${opexPct}%"></div>
             </div>
-          </div>
-        </section>
-
-        <section class="widget">
-          <div class="widget-head"><h3>Kas, Bank &amp; Persediaan</h3><button class="button small secondary" data-go="inventory">Kartu Stok</button></div>
-          <div class="widget-body">
+            <div class="chart-legend">
+              <span><i style="background:var(--brand)"></i>Pendapatan</span>
+              <span><i style="background:#d97706"></i>HPP / Pokok</span>
+              <span><i style="background:#64748b"></i>Beban Ops</span>
+            </div>
             <div class="mini-list">
-              <div class="mini-row"><span>1101 · Kas Tunai</span><strong>${money(cashVal)}</strong></div>
-              <div class="mini-row"><span>1102 · Kas Bank / Rekening</span><strong>${money(bankVal)}</strong></div>
-              <div class="mini-row"><span>1104 · Bahan Baku</span><strong>${money(fin.cumulativeBalances["1104"] || 0)}</strong></div>
-              <div class="mini-row"><span>1106 · WIP Produksi</span><strong>${money(fin.cumulativeBalances["1106"] || 0)}</strong></div>
-              <div class="mini-row"><span>1105 · Barang Jadi</span><strong>${money(fin.cumulativeBalances["1105"] || 0)}</strong></div>
+              <div class="mini-row"><span>Pendapatan Usaha</span><strong>${money(fin.revenue)}</strong></div>
+              <div class="mini-row"><span>Harga Pokok Penjualan / Jasa</span><strong>${money(fin.cogs)}</strong></div>
+              <div class="mini-row"><span>Laba Kotor (Margin ${grossMargin})</span><strong>${money(fin.grossProfit)}</strong></div>
+              <div class="mini-row"><span>Beban Operasional</span><strong>${money(fin.operatingExpenses)}</strong></div>
+              <div class="mini-row"><span>Laba Bersih</span><strong>${money(fin.netIncome)}</strong></div>
             </div>
           </div>
         </section>
 
         <section class="widget">
-          <div class="widget-head"><h3>Neraca Ringkas</h3><span class="status-pill ${fin.isBalanced ? "good" : "bad"}">${fin.isBalanced ? "Seimbang" : "Selisih"}</span></div>
+          <div class="widget-head"><h3>Posisi Neraca &amp; Persediaan</h3><span class="dot-badge ${fin.isBalanced ? "good" : "bad"}">${fin.isBalanced ? "Seimbang" : "Selisih"}</span></div>
           <div class="widget-body">
             ${equationHtml(fin)}
             <div class="mini-list" style="margin-top:10px">
-              <div class="mini-row"><span>Modal Awal Periode</span><strong>${money(fin.openingCapital)}</strong></div>
-              <div class="mini-row"><span>Modal Akhir Periode</span><strong>${money(fin.endingCapital)}</strong></div>
-              <div class="mini-row"><span>Status Periode ${p.value}</span><strong>${isActivePeriodClosed() ? "Ditutup" : "Terbuka"}</strong></div>
+              <div class="mini-row"><span>1104 · Bahan Baku</span><strong>${money(fin.cumulativeBalances["1104"] || 0)}</strong></div>
+              <div class="mini-row"><span>1106 · WIP Produksi</span><strong>${money(fin.cumulativeBalances["1106"] || 0)}</strong></div>
+              <div class="mini-row"><span>1105 · Barang Jadi</span><strong>${money(fin.cumulativeBalances["1105"] || 0)}</strong></div>
+              <div class="mini-row"><span>Modal Awal → Akhir</span><strong>${compactMoney(fin.openingCapital)} → ${compactMoney(fin.endingCapital)}</strong></div>
             </div>
           </div>
         </section>
@@ -885,42 +901,42 @@
 
       <div class="dash-grid two-col">
         <section class="widget">
-          <div class="widget-head"><h3>Piutang Usaha Belum Lunas (${openReceivables.length})</h3><button class="button small secondary" data-go="sales">Lihat Penjualan</button></div>
-          <div class="table-wrap"><table><thead><tr><th>No. Faktur</th><th>Pelanggan</th><th>Tgl</th><th class="num">Sisa</th><th class="num">Aksi</th></tr></thead><tbody>
+          <div class="widget-head"><h3>Piutang Usaha Belum Lunas (${openReceivables.length})</h3><button class="button small ghost" data-go="sales">Penjualan</button></div>
+          <div class="table-wrap"><table><thead><tr><th>No. Faktur</th><th>Pelanggan</th><th>Tgl</th><th class="num">Sisa</th><th class="num"></th></tr></thead><tbody>
             ${openReceivables.length ? openReceivables.slice(0, 5).map((inv) => `<tr>
               <td><span class="document-id">${escapeHtml(inv.invoiceNumber)}</span></td>
               <td>${escapeHtml(inv.partyName)}</td>
               <td>${shortDate(inv.date)}</td>
               <td class="num"><strong>${money(inv.remainingAmount)}</strong></td>
               <td class="num"><button type="button" class="button small secondary quick-settle-btn" data-kind="receivable" data-party="${inv.partyId}" data-invoice="${inv.id}" data-amount="${inv.remainingAmount}">Terima</button></td>
-            </tr>`).join("") : `<tr><td colspan="5" class="empty-state">Tidak ada piutang terbuka.</td></tr>`}
+            </tr>`).join("") : `<tr><td colspan="5" class="empty-state">Semua piutang telah lunas.</td></tr>`}
           </tbody></table></div>
         </section>
 
         <section class="widget">
-          <div class="widget-head"><h3>Utang Usaha Belum Lunas (${openPayables.length})</h3><button class="button small secondary" data-go="purchases">Lihat Pembelian</button></div>
-          <div class="table-wrap"><table><thead><tr><th>No. Faktur</th><th>Pemasok</th><th>Tgl</th><th class="num">Sisa</th><th class="num">Aksi</th></tr></thead><tbody>
+          <div class="widget-head"><h3>Utang Usaha Belum Lunas (${openPayables.length})</h3><button class="button small ghost" data-go="purchases">Pembelian</button></div>
+          <div class="table-wrap"><table><thead><tr><th>No. Faktur</th><th>Pemasok</th><th>Tgl</th><th class="num">Sisa</th><th class="num"></th></tr></thead><tbody>
             ${openPayables.length ? openPayables.slice(0, 5).map((inv) => `<tr>
               <td><span class="document-id">${escapeHtml(inv.invoiceNumber)}</span></td>
               <td>${escapeHtml(inv.partyName)}</td>
               <td>${shortDate(inv.date)}</td>
               <td class="num"><strong>${money(inv.remainingAmount)}</strong></td>
               <td class="num"><button type="button" class="button small secondary quick-settle-btn" data-kind="payable" data-party="${inv.partyId}" data-invoice="${inv.id}" data-amount="${inv.remainingAmount}">Bayar</button></td>
-            </tr>`).join("") : `<tr><td colspan="5" class="empty-state">Tidak ada utang terbuka.</td></tr>`}
+            </tr>`).join("") : `<tr><td colspan="5" class="empty-state">Semua utang telah lunas.</td></tr>`}
           </tbody></table></div>
         </section>
       </div>
 
       <section class="widget">
-        <div class="widget-head"><h3>Aktivitas Transaksi Terbaru (${p.label})</h3><button class="button small secondary" data-go="ledger">Buku Besar</button></div>
-        <div class="table-wrap"><table><thead><tr><th>No. Dokumen</th><th>Tanggal</th><th>Keterangan</th><th>Status</th><th class="num">Nilai</th><th class="num">Detail</th></tr></thead><tbody>
+        <div class="widget-head"><h3>Transaksi Terbaru (${p.label})</h3><button class="button small ghost" data-go="ledger">Buku Besar</button></div>
+        <div class="table-wrap"><table><thead><tr><th>No. Dokumen</th><th>Tanggal</th><th>Keterangan</th><th>Status</th><th class="num">Nilai</th><th class="num"></th></tr></thead><tbody>
           ${recent.length ? recent.map((entry) => `<tr class="${entry.status === "voided" ? "row-voided" : ""}">
             <td><span class="document-id">${escapeHtml(entry.documentNumber)}</span></td>
             <td>${shortDate(entry.date)}</td>
             <td><span class="account-name">${escapeHtml(entry.description)}</span></td>
             <td>${statusBadge(entry)}</td>
             <td class="num">${money(entry.amount)}</td>
-            <td class="num"><button type="button" class="button small secondary view-journal" data-id="${entry.id}">Jurnal</button></td>
+            <td class="num"><button type="button" class="button small ghost view-journal" data-id="${entry.id}">Lihat Jurnal</button></td>
           </tr>`).join("") : `<tr><td colspan="6" class="empty-state">Belum ada transaksi pada ${p.label}.</td></tr>`}
         </tbody></table></div>
       </section>
@@ -2144,7 +2160,7 @@
       } else if (t === "drawing") {
         previewLines.push({ side: "Dr", code: "3102", amount }, { side: "Cr", code: cashCode, amount });
       }
-      document.getElementById("transactionPreview").innerHTML = `<div class="entry-preview-head"><strong>Pratinjau Jurnal Double-Entry</strong><span class="status-pill info">Tervalidasi di backend</span></div>
+      document.getElementById("transactionPreview").innerHTML = `<div class="entry-preview-head"><strong>Ringkasan Jurnal Double-Entry</strong><span class="muted">Otomatis saat simpan</span></div>
         ${previewLines.map((l) => `<div class="entry-line ${l.side === "Cr" ? "credit" : ""}"><span>${l.side} · ${l.code} ${escapeHtml(accs[l.code]?.name || "")}</span><b>${money(l.amount)}</b></div>`).join("")}`;
     }
 
